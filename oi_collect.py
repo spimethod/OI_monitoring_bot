@@ -83,10 +83,14 @@ def get_db_connection():
         return None
 
 def setup_database(conn):
-    """Создает таблицу для данных OI, если она не существует."""
+    """Очищает и подготавливает таблицу для новых данных."""
     try:
         with conn.cursor() as cur:
-            # Упрощаем создание таблицы, убираем сложный индекс
+            # Сначала полностью очищаем таблицу от старых данных
+            print("[DB] Очистка таблицы 'oi_data'...")
+            cur.execute("TRUNCATE TABLE oi_data RESTART IDENTITY;")
+            
+            # Команда создания таблицы остается на случай первого запуска
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS oi_data (
                     id SERIAL PRIMARY KEY,
@@ -94,14 +98,13 @@ def setup_database(conn):
                     token_symbol VARCHAR(20) NOT NULL,
                     token_name TEXT,
                     oi_growth_4h FLOAT,
-                    -- Делаем уникальной саму пару "символ-время", это проще и надежнее
                     UNIQUE(token_symbol, scan_time)
                 );
             """)
             conn.commit()
             print("[DB] Таблица 'oi_data' готова к работе.")
     except Exception as e:
-        print(f"[DB Error] Не удалось создать таблицу: {e}")
+        print(f"[DB Error] Не удалось подготовить таблицу: {e}")
         conn.rollback()
 
 # ПАТЧ для oi_collect.py

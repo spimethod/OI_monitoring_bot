@@ -22,7 +22,9 @@ def get_db_connection():
         return None
 
 def get_tokens_to_process(conn):
-    query = "SELECT token_symbol FROM oi_data GROUP BY token_symbol HAVING COUNT(*) >= 2;"
+    """Находит токены, у которых есть РОВНО 2 записи для анализа."""
+    # Мы ищем только те токены, по которым только что пришло второе значение
+    query = "SELECT token_symbol FROM oi_data GROUP BY token_symbol HAVING COUNT(*) = 2;"
     try:
         with conn.cursor() as cur:
             cur.execute(query)
@@ -45,17 +47,16 @@ def get_latest_records(conn, token_symbol):
         print(f"[DB Error] Не удалось получить записи для {token_symbol}: {e}")
         return None, None
 
-def cleanup_old_records(conn, previous_record_time, token_symbol):
-    query = "DELETE FROM oi_data WHERE token_symbol = %s AND scan_time < %s;"
+def cleanup_old_records(conn, previous_record_id, token_symbol):
+    """Удаляет самую старую (предыдущую) запись для токена."""
+    query = "DELETE FROM oi_data WHERE id = %s AND token_symbol = %s;"
     try:
         with conn.cursor() as cur:
-            cur.execute(query, (token_symbol, previous_record_time))
-            deleted_count = cur.rowcount
+            cur.execute(query, (previous_record_id, token_symbol))
             conn.commit()
-            if deleted_count > 0:
-                print(f"[DB] Успешно удалено {deleted_count} позапрошлых записей для {token_symbol}.")
+            print(f"[DB] Успешно удалена обработанная запись с ID {previous_record_id} для {token_symbol}.")
     except Exception as e:
-        print(f"[DB Error] Не удалось удалить старые записи: {e}")
+        print(f"[DB Error] Не удалось удалить старую запись для {token_symbol}: {e}")
         conn.rollback()
 
 # --- ФУНКЦИЯ ДЛЯ ОТПРАВКИ В TELEGRAM ---
@@ -69,12 +70,18 @@ async def send_telegram_alert(message):
         print(f"[Telegram Error] Не удалось отправить уведомление: {e}")
 
 # --- ОСНОВНОЙ ЦИКЛ АНАЛИЗАТОРА (PUSH-МОДЕЛЬ) ---
+# ПАТЧ 3 для analyzer_bot.py (замените весь блок if __name__...)
+
+# --- ОСНОВНОЙ ЦИКЛ АНАЛИЗАТОРА (PUSH-МОДЕЛЬ) ---
 if __name__ == "__main__":
-    print("--- ЗАПУСК СЕРВИСА-АНАЛИЗАТОРА ДИНАМИКИ OI (PUSH-МОДЕЛЬ) ---")
+    print("--- ЗАПУСК СЕРВИСА-АНАЛИЗАТОРА ДИНАМИКИ OI (v2 - Умный анализ) ---")
     
     if not all([DATABASE_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID]):
         print("[CRITICAL] Не все переменные окружения установлены.")
     else:
+        # Проверка сортировки не требуется, т.к. Postgres по умолчанию добавляет записи в конец.
+        # При выборке мы явно указываем ORDER BY scan_time.
+        
         listener_conn = get_db_connection()
         if listener_conn:
             listener_conn.autocommit = True
@@ -83,7 +90,6 @@ if __name__ == "__main__":
             print("[DB] Слушаю канал 'new_data_event'...")
 
             while True:
-                # Ждем уведомления от базы данных
                 listener_conn.poll()
                 while listener_conn.notifies:
                     notification = listener_conn.notifies.pop(0)
@@ -92,29 +98,32 @@ if __name__ == "__main__":
                     analysis_conn = get_db_connection()
                     if analysis_conn:
                         tokens_to_process = get_tokens_to_process(analysis_conn)
-                        print(f"Найдено {len(tokens_to_process)} токенов для анализа.")
+                        print(f"Найдено {len(tokens_to_process)} токенов с новой парой данных для анализа.")
 
                         for token in tokens_to_process:
                             current_record, previous_record = get_latest_records(analysis_conn, token)
+                            
                             if current_record and previous_record:
                                 current_id, current_name, current_oi, _ = current_record
-                                prev_id, _, prev_oi, prev_time = previous_record
+                                prev_id, _, prev_oi, _ = previous_record
 
                                 oi_delta = current_oi - prev_oi
+
                                 print(f"  > Анализ {token}: Текущий рост OI {current_oi:.2f}%, Предыдущий {prev_oi:.2f}%. Дельта: {oi_delta:.2f}%")
                                 
-                                if current_oi >= OI_DELTA_THRESHOLD:
+                                # ИЗМЕНЕНО: Проверяем ДЕЛЬТУ, а не текущее значение
+                                if oi_delta >= OI_DELTA_THRESHOLD:
                                     message = (
-                                        f"🚀 *Алерт по росту OI* 🚀\n\n"
+                                        f"🚀 *Алерт по УСКОРЕНИЮ роста OI* 🚀\n\n"
                                         f"Токен: *{current_name} ({token})*\n\n"
-                                        f"🔥 Рост OI за 4 часа: *{current_oi:.2f}%*\n"
-                                        f"_(Предыдущее значение: {prev_oi:.2f}%)_\n"
-                                        f"Изменение (дельта): *{oi_delta:+.2f}%*"
+                                        f"🔥 Изменение роста OI за 4 часа: *{oi_delta:+.2f}%*\n"
+                                        f"_(Текущий рост: {current_oi:.2f}%, Предыдущий: {prev_oi:.2f}%)_"
                                     )
                                     asyncio.run(send_telegram_alert(message))
                                 
-                                cleanup_old_records(analysis_conn, prev_time, token)
+                                # Удаляем предыдущую запись, чтобы токен снова ждал пару
+                                cleanup_old_records(analysis_conn, prev_id, token)
                         
                         analysis_conn.close()
                 
-                time.sleep(1) # Небольшая пауза, чтобы не нагружать процессор
+                time.sleep(1)
