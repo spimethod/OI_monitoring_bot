@@ -129,7 +129,7 @@ def insert_oi_data(conn, data_list):
 
 # --- ОСНОВНОЙ СКРИПТ OI СКАНЕР ---
 if __name__ == "__main__":
-    print("--- ЗАПУСК СКАНЕРА РОСТА OI С ЗАПИСЬЮ В БД ---")
+    print("--- ЗАПУСК СКАНЕРА РОСТА OI С ЗАПИСЬЮ В БД (v2 - Порционная запись) ---")
     
     if not DATABASE_URL:
         print("[CRITICAL] Переменная окружения DATABASE_URL не установлена. Завершение работы.")
@@ -139,29 +139,34 @@ if __name__ == "__main__":
             setup_database(conn)
 
             symbols_to_scan = get_top_symbols()
-            all_oi_data = []
+            
+            # ИЗМЕНЕНО: Создаем временный список для порции данных
+            data_batch = []
+            BATCH_SIZE = 20 # Будем записывать в БД каждые 20 токенов
 
-            for i, token_info in enumerate(symbols_to_scan):
+            for i, token_info in enumerate(symbols_to_scan, 1):
                 token = token_info['symbol']
                 token_name = token_info['name']
-                print(f"({i+1}/{len(symbols_to_scan)}) Сканирование {token} ({token_name})...", end="")
+                print(f"({i}/{len(symbols_to_scan)}) Сканирование {token} ({token_name})...", end="")
                 
                 oi_growth = get_oi_growth_from_coinglass(token)
                 time.sleep(API_DELAY_SECONDS)
                 
                 if oi_growth is not None:
                     print(f" Рост OI за 4ч: {oi_growth:.2f}%")
-                    all_oi_data.append({'symbol': token, 'name': token_name, 'oi_growth': oi_growth})
+                    # Добавляем данные в порцию
+                    data_batch.append({'symbol': token, 'name': token_name, 'oi_growth': oi_growth})
                 else:
                     print(" нет данных по OI.")
+
+                # ИЗМЕНЕНО: Проверяем, не пора ли записать порцию в БД
+                if i % BATCH_SIZE == 0 or i == len(symbols_to_scan):
+                    if data_batch:
+                        print(f"--- [DB] Запись порции из {len(data_batch)} токенов в базу данных... ---")
+                        insert_oi_data(conn, data_batch)
+                        data_batch = [] # Очищаем порцию
             
-            if all_oi_data:
-                sorted_list = sorted(all_oi_data, key=lambda x: x['oi_growth'], reverse=True)
-                print("\n\n" + "="*20 + " ТОП-20 ПО РОСТУ OI ЗА 4 ЧАСА " + "="*20)
-                for item in sorted_list[:20]:
-                    print(f"  - {item['symbol']:<10} | {item['oi_growth']:.2f}%")
-                
-                insert_oi_data(conn, all_oi_data)
+            # --- Итоговый ТОП-список больше не нужен, т.к. все данные уже в БД ---
             
             conn.close()
             print("[DB] Соединение с базой данных закрыто.")
