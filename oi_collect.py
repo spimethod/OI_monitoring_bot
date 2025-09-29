@@ -104,25 +104,22 @@ def setup_database(conn):
         print(f"[DB Error] Не удалось создать таблицу: {e}")
         conn.rollback()
 
+# ПАТЧ для oi_collect.py
 def insert_oi_data(conn, data_list):
-    """Вставляет список данных по OI в базу данных (упрощенная версия)."""
+    """Вставляет данные и отправляет NOTIFY сигнал."""
     if not data_list:
         return
     
-    # Простой и надежный запрос INSERT
-    query = """
-        INSERT INTO oi_data (token_symbol, token_name, oi_growth_4h)
-        VALUES (%s, %s, %s);
-    """
-    
+    query = "INSERT INTO oi_data (token_symbol, token_name, oi_growth_4h) VALUES (%s, %s, %s);"
     records_to_insert = [(item['symbol'], item['name'], item['oi_growth']) for item in data_list]
     
     try:
         with conn.cursor() as cur:
-            # executemany - эффективный способ вставить много строк одним запросом
             cur.executemany(query, records_to_insert)
+            # Отправляем сигнал после успешной вставки
+            cur.execute("NOTIFY new_data_event;")
             conn.commit()
-            print(f"[DB] Успешно записано {len(records_to_insert)} строк в базу данных.")
+            print(f"[DB] Успешно записано {len(records_to_insert)} строк и отправлен NOTIFY.")
     except Exception as e:
         print(f"[DB Error] Не удалось записать данные: {e}")
         conn.rollback()
