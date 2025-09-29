@@ -70,19 +70,17 @@ def setup_database(conn):
     """Создает таблицу для данных OI, если она не существует."""
     try:
         with conn.cursor() as cur:
+            # Упрощаем создание таблицы, убираем сложный индекс
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS oi_data (
                     id SERIAL PRIMARY KEY,
                     scan_time TIMESTAMPTZ DEFAULT NOW(),
                     token_symbol VARCHAR(20) NOT NULL,
                     token_name TEXT,
-                    oi_growth_4h FLOAT
+                    oi_growth_4h FLOAT,
+                    -- Делаем уникальной саму пару "символ-время", это проще и надежнее
+                    UNIQUE(token_symbol, scan_time)
                 );
-            """)
-            # Добавляем уникальный индекс, чтобы избежать дубликатов за один запуск
-            cur.execute("""
-                CREATE UNIQUE INDEX IF NOT EXISTS unique_scan_token 
-                ON oi_data (DATE_TRUNC('hour', scan_time), token_symbol);
             """)
             conn.commit()
             print("[DB] Таблица 'oi_data' готова к работе.")
