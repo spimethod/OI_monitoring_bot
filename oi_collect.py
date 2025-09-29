@@ -89,24 +89,24 @@ def setup_database(conn):
         conn.rollback()
 
 def insert_oi_data(conn, data_list):
-    """Вставляет список данных по OI в базу данных."""
+    """Вставляет список данных по OI в базу данных (упрощенная версия)."""
     if not data_list:
         return
     
-    # ON CONFLICT - специальная команда Postgres для обработки дубликатов
+    # Простой и надежный запрос INSERT
     query = """
         INSERT INTO oi_data (token_symbol, token_name, oi_growth_4h)
-        VALUES (%s, %s, %s)
-        ON CONFLICT ((DATE_TRUNC('hour', scan_time)), token_symbol) DO NOTHING;
+        VALUES (%s, %s, %s);
     """
     
     records_to_insert = [(item['symbol'], item['name'], item['oi_growth']) for item in data_list]
     
     try:
         with conn.cursor() as cur:
+            # executemany - эффективный способ вставить много строк одним запросом
             cur.executemany(query, records_to_insert)
             conn.commit()
-            print(f"[DB] Успешно обработано {len(records_to_insert)} строк для записи в базу данных.")
+            print(f"[DB] Успешно записано {len(records_to_insert)} строк в базу данных.")
     except Exception as e:
         print(f"[DB Error] Не удалось записать данные: {e}")
         conn.rollback()
