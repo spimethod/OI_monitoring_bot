@@ -7,11 +7,11 @@ from psycopg2 import sql
 
 # --- ГЛАВНАЯ КОНФИГУРАЦИЯ ---
 # Эти ключи будут браться из переменных окружения на Railway
-COINGLASS_API_KEY = os.environ.get('COINGLASS_API_KEY', "001b9967a85c45779a2a4366647bf30c")
-COINMARKETCAP_API_KEY = os.environ.get('COINMARKETCAP_API_KEY', "dd55a178-8465-43d4-8bef-8da7f171bedf")
+COINGLASS_API_KEY = os.environ.get('COINGLASS_API_KEY')
+COINMARKETCAP_API_KEY = os.environ.get('COINMARKETCAP_API_KEY')
 
 NUMBER_OF_TOKENS_TO_SCAN = 300
-API_DELAY_SECONDS = 1 
+API_DELAY_SECONDS = 2 
 
 # --- КОНФИГУРАЦИЯ БАЗЫ ДАННЫХ (для Railway) ---
 DATABASE_URL = os.environ.get('DATABASE_URL')
