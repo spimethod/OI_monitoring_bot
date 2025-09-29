@@ -29,12 +29,28 @@ def get_top_symbols():
     headers = {'Accepts': 'application/json', 'X-CMC_PRO_API_KEY': COINMARKETCAP_API_KEY}
     params = {'limit': NUMBER_OF_TOKENS_TO_SCAN}
     try:
-        response = requests.get(url, headers=headers, params=params).json()
-        stablecoins = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP']
-        symbols = [{'symbol': item['symbol'], 'name': item['name']} for item in response['data'] if item['symbol'] not in stablecoins and not item['symbol'].startswith('W')]
-        print(f"[CMC] Успешно получено {len(symbols)} торговых символов.")
-        return symbols
+        response = requests.get(url, headers=headers, params=params)
+        # Проверяем, что запрос вообще прошел успешно (код 200)
+        response.raise_for_status() 
+        data = response.json()
+        
+        # Проверяем, есть ли в ответе ключ 'data', или это сообщение об ошибке
+        if 'data' in data:
+            stablecoins = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP']
+            symbols = [{'symbol': item['symbol'], 'name': item['name']} for item in data['data'] if item['symbol'] not in stablecoins and not item['symbol'].startswith('W')]
+            print(f"[CMC] Успешно получено {len(symbols)} торговых символов.")
+            return symbols
+        else:
+            # Если ключа 'data' нет, значит, пришла ошибка от API (скорее всего, лимиты)
+            print(f"[CMC] КРИТИЧЕСКАЯ ОШИБКА: API не вернул данные. Ответ сервера: {data}")
+            return []
+            
+    except requests.exceptions.HTTPError as http_err:
+        # Эта ошибка сработает, если код ответа не 200 (например, 429 - Too Many Requests)
+        print(f"[CMC] КРИТИЧЕСКАЯ HTTP ОШИБКА: {http_err}")
+        return []
     except Exception as e:
+        # Любая другая ошибка (проблемы с сетью и т.д.)
         print(f"[CMC] КРИТИЧЕСКАЯ ОШИБКА: {e}")
         return []
 
