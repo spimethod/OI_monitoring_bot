@@ -83,14 +83,11 @@ def get_db_connection():
         return None
 
 def setup_database(conn):
-    """Очищает и подготавливает таблицу для новых данных."""
+    """Создает таблицу для данных OI, если она еще не существует. НЕ ОЧИЩАЕТ ДАННЫЕ."""
     try:
         with conn.cursor() as cur:
-            # Сначала полностью очищаем таблицу от старых данных
-            print("[DB] Очистка таблицы 'oi_data'...")
-            cur.execute("TRUNCATE TABLE oi_data RESTART IDENTITY;")
-            
-            # Команда создания таблицы остается на случай первого запуска
+            # Эта команда ТОЛЬКО создает таблицу, если ее нет.
+            # Существующую таблицу с данными она не трогает.
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS oi_data (
                     id SERIAL PRIMARY KEY,
@@ -102,9 +99,9 @@ def setup_database(conn):
                 );
             """)
             conn.commit()
-            print("[DB] Таблица 'oi_data' готова к работе.")
+            print("[DB] Проверка: таблица 'oi_data' существует.")
     except Exception as e:
-        print(f"[DB Error] Не удалось подготовить таблицу: {e}")
+        print(f"[DB Error] Не удалось проверить/создать таблицу: {e}")
         conn.rollback()
 
 # ПАТЧ для oi_collect.py
