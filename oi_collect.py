@@ -10,7 +10,7 @@ from psycopg2 import sql
 COINGLASS_API_KEY = os.environ.get('COINGLASS_API_KEY')
 COINMARKETCAP_API_KEY = os.environ.get('COINMARKETCAP_API_KEY')
 
-NUMBER_OF_TOKENS_TO_SCAN = 15
+NUMBER_OF_TOKENS_TO_SCAN = 100
 API_DELAY_SECONDS = 2 
 
 # --- КОНФИГУРАЦИЯ БАЗЫ ДАННЫХ (для Railway) ---
